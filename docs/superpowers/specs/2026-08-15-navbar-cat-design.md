@@ -106,6 +106,8 @@ Priority ladder, first match wins:
 | 1 | Recently petted | Sit and purr, hold position |
 | 2 | Pointer over the bar | Run to it, then sit and wait |
 | 3 | Workspace switched | Scamper in the switch direction |
+| 3b | Theme changed | Startle and bolt (shares rung 3) |
+| 3c | Notification on screen | Run to the end nearest the toast and watch |
 | 4 | Music playing | Dance on the spot (moved above charging) |
 | 5 | On AC power | Get drowsy and curl up where it stands (revised) |
 | 6 | No pointer movement for `sleepAfter` | Sleep in place |
@@ -286,6 +288,46 @@ While wiring this up: the brain's generator was seeded with a constant, which
 is what makes the wander tests reproducible but also meant every session
 started the cat in the same place and sent it on the same route. The QML now
 seeds it from the clock; the tests still pass their own seed.
+
+## Sixth round — notifications, rhythm, startle, menu
+
+**Notifications, after I said they were impossible.** The first spec ruled these
+out because the shell owns the notification server and a second one cannot bind.
+That was true about *binding* and wrong about *observing*:
+`shell.serviceFor(pluginId)` is public (shell.qml:275) and the notifications
+service aliases `popupModel` with the comment "consumers outside this Item's id
+scope can bind to it". Watching an arrival is a five-line `Connections`.
+
+The cat runs to the end of the bar nearest the toast — right on a horizontal
+bar, top on a vertical one, since Omarchy anchors toasts top-right either way.
+
+Attention is tied to the toast still being on screen rather than to a timer.
+The first cut used a fixed 5s window and live testing showed the flaw
+immediately: the bar is ~1600px, the cat runs at 150px/s, so crossing it takes
+about ten seconds, and a low-priority toast is gone in five. The cat would run
+two-thirds of the way and turn back. Tracking `popupModel.count` also means a
+critical toast that waits for dismissal keeps the cat's attention, and it makes
+Do Not Disturb work for free — a silenced machine shows no popups, so the cat
+never reacts.
+
+**Crepuscular rhythm.** `rhythmFor(hour)` returns multipliers rather than
+behaviour, so the rhythm colours what the cat already does instead of forking a
+second set of moods. An unreadable hour is treated as an ordinary day, which is
+what let every pre-rhythm test keep passing untouched.
+
+**Theme startle** shares rung 3 with the workspace scamper. Two rungs differing
+only in a reason string would be two places to keep in step.
+
+**Right-click menu.** `CatMenu.qml` is a full-screen transparent layer with a
+small card near the cat; full-screen is what makes click-outside-to-dismiss
+work, since the surface has to receive the dismissing click. It claims an input
+region only while open and never takes keyboard focus.
+
+This is the first thing in the plugin that writes. It touches only this
+plugin's own `plugins[]` entry, only on an explicit click, through
+`shell.mutateShellConfig`. The README's "writes nothing" claim was corrected;
+the same sentence in the marketplace submission notes is now stale and cannot
+be amended, since issue #452 is closed and listed.
 
 ## Out of scope
 
