@@ -100,23 +100,28 @@ function clamp(value, low, high) {
 // This is a guess about layout, not knowledge of it: nothing exposes widget
 // geometry. `avoidCenter` is the fraction of the bar to keep clear, and 0
 // turns the whole idea off for anyone whose clock lives elsewhere.
-function pickSpot(state, maxX, barLength, avoid) {
+//
+// `minX` is the start of the stretch the cat may stand on: everything before it
+// (`keepOff`, the workspace buttons) is never picked.
+function pickSpot(state, maxX, barLength, avoid, minX) {
   if (maxX <= 0) return 0
-  if (!(avoid > 0)) return nextRandom(state) * maxX
+  minX = clamp(Number(minX) || 0, 0, maxX)
+  if (!(avoid > 0)) return minX + nextRandom(state) * (maxX - minX)
 
   var middle = maxX / 2
   var halfGap = (barLength * avoid) / 2
   var lowEnd = middle - halfGap
   var highStart = middle + halfGap
 
-  var lowSpan = Math.max(0, lowEnd)
+  var lowSpan = Math.max(0, lowEnd - minX)
+  highStart = Math.max(highStart, minX)
   var highSpan = Math.max(0, maxX - highStart)
   // A bar too narrow to have an outside falls back to anywhere at all, rather
   // than leaving the cat with nowhere legal to stand.
-  if (lowSpan + highSpan <= 0) return nextRandom(state) * maxX
+  if (lowSpan + highSpan <= 0) return minX + nextRandom(state) * (maxX - minX)
 
   var roll = nextRandom(state) * (lowSpan + highSpan)
-  return roll < lowSpan ? roll : highStart + (roll - lowSpan)
+  return roll < lowSpan ? minX + roll : highStart + (roll - lowSpan)
 }
 
 // Cats are crepuscular: quiet overnight, busiest around dawn and dusk. This
@@ -250,7 +255,7 @@ function intent(input, state) {
   if (state.stirUntil !== null && state.stirUntil !== undefined) {
     if (now < state.stirUntil) {
       if (state.wanderTarget === null || state.wanderTarget === undefined) {
-        state.wanderTarget = pickSpot(state, maxX, input.barLength, config.avoidCenter)
+        state.wanderTarget = pickSpot(state, maxX, input.barLength, config.avoidCenter, input.minX)
       }
       return {
         reason: "stir",
@@ -266,7 +271,7 @@ function intent(input, state) {
       && now >= state.nextStirAt) {
     state.nextStirAt = null
     state.stirUntil = now + (config.stirFor || 25) * 1000
-    state.wanderTarget = pickSpot(state, maxX, input.barLength, config.avoidCenter)
+    state.wanderTarget = pickSpot(state, maxX, input.barLength, config.avoidCenter, input.minX)
     return {
       reason: "stir",
       target: state.wanderTarget,
@@ -324,7 +329,7 @@ function intent(input, state) {
   // 8. Nothing in particular. Wander, and re-roll once the cat has finished
   //    dawdling wherever it arrived.
   if (state.wanderTarget === null || state.wanderTarget === undefined) {
-    state.wanderTarget = pickSpot(state, maxX, input.barLength, config.avoidCenter)
+    state.wanderTarget = pickSpot(state, maxX, input.barLength, config.avoidCenter, input.minX)
   }
   return {
     reason: "wander",
@@ -360,9 +365,14 @@ function decide(input, state) {
   var edge = input.edge || (vertical ? "left" : "top")
   var now = input.now
 
+  // The cat never goes below this, whatever it is after: the pointer, a
+  // startle, a pounce. Chasing the pointer onto the workspace buttons would
+  // otherwise park a clickable cat right on top of them.
+  var minX = clamp(Number(input.minX) || 0, 0, maxX)
+
   var want = intent(input, state)
   var rawTarget = want.target
-  var target = clamp(rawTarget, 0, maxX)
+  var target = clamp(rawTarget, minX, maxX)
   var delta = target - input.x
   var moving = want.gait !== "idle" && Math.abs(delta) > ARRIVE_EPS
 
@@ -385,7 +395,7 @@ function decide(input, state) {
     } else {
       // A half-sine arc: off the ground, over, and back down.
       var leapTarget = clamp(
-        state.pounceFrom + state.lastDir * POUNCE_REACH * progress, 0, maxX)
+        state.pounceFrom + state.lastDir * POUNCE_REACH * progress, minX, maxX)
       state.pose = leapPose(edge, state.lastDir, progress < 0.5 ? 1 : -1)
       return {
         reason: "pounce",
@@ -474,7 +484,7 @@ function decide(input, state) {
   // Wanting to walk off the end of the bar becomes clawing at it instead.
   if (rawTarget > maxX + ARRIVE_EPS) {
     pose = vertical ? "dtogi" : "rtogi"
-  } else if (rawTarget < -ARRIVE_EPS) {
+  } else if (rawTarget < minX - ARRIVE_EPS) {
     pose = vertical ? "utogi" : "ltogi"
   }
 

@@ -107,6 +107,9 @@ Item {
   readonly property real avoidCenter: config.avoidCenter !== undefined
     ? Math.max(0, Math.min(0.9, Number(config.avoidCenter)))
     : 0.2
+  // Pixels at the start of the bar the cat stays out of entirely, so it never
+  // sits on the workspace buttons. 0 lets it roam the whole bar.
+  readonly property real keepOff: Number(config.keepOff) > 0 ? Number(config.keepOff) : 0
   readonly property bool rhythm: config.rhythm !== false
   readonly property int stirEvery: Number(config.stirEvery) > 0 ? Number(config.stirEvery) : 150
   readonly property int stirFor: Number(config.stirFor) > 0 ? Number(config.stirFor) : 25
@@ -344,6 +347,7 @@ Item {
 
     var now = Date.now()
     var maxPos = Math.max(0, barLength - catSize)
+    var minPos = Math.min(keepOff, maxPos)
     var onBar = pointerOnBar()
 
     // Drop the cat somewhere arbitrary the first time we know how long the bar
@@ -352,7 +356,7 @@ Item {
     // same left-hand corner.
     if (!_placed) {
       _placed = true
-      catPos = Brain.pickSpot(brainState, maxPos, barLength, avoidCenter)
+      catPos = Brain.pickSpot(brainState, maxPos, barLength, avoidCenter, minPos)
     }
 
     var decision = Brain.decide({
@@ -362,6 +366,7 @@ Item {
       barLength: barLength,
       catSize: catSize,
       x: catPos,
+      minX: minPos,
       pointer: onBar ? { onBar: true, pos: pointerAlongBar() } : null,
       pettedAt: pettedAt >= 0 ? pettedAt : null,
       lastPointerMoveAt: lastPointerMoveAt,
@@ -405,7 +410,7 @@ Item {
           : catPos + (delta > 0 ? stepSize : -stepSize)
       }
     }
-    catPos = Math.max(0, Math.min(maxPos, catPos))
+    catPos = Math.max(minPos, Math.min(maxPos, catPos))
 
     catPose = decision.pose
     catBob = decision.bob
